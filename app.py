@@ -19,7 +19,7 @@ with st.sidebar:
 # API 키가 입력되면 AI 모델 준비
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
 else:
     st.info("👈 왼쪽 사이드바에 API 키를 먼저 입력해 주세요!")
 
