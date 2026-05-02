@@ -6,7 +6,7 @@ from PIL import Image
 # 1. 비밀 금고에서 API 키 가져오기 (학생들에겐 절대 안 보임!)
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 # 사진도 볼 수 있는 최신 멀티모달 모델 사용
-model = genai.GenerativeModel('gemini-1.5-pro')
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 # 2. 웹사이트 기본 설정 및 변경된 타이틀
 st.set_page_config(page_title="English with Nora", page_icon="📚", layout="centered")
 
