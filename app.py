@@ -4,7 +4,6 @@ from PIL import Image
 import os
 import pandas as pd
 
-# 1. API 키 및 모델 설정
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 valid_model_name = 'gemini-2.5-flash'
@@ -19,10 +18,10 @@ except Exception:
 
 model = genai.GenerativeModel(valid_model_name)
 
-# 2. 깃허브 폴더 자동 인식 및 PDF 장착
+# 🚨 [수정됨] 모든 파일을 한 번에 주지 않기 위해, 파일 이름표를 달아서 보관!
 @st.cache_resource(show_spinner=False)
 def load_permanent_pdfs_to_gemini():
-    gemini_files = []
+    gemini_files_dict = {} 
     folder_path = "pdf_materials" 
     if os.path.exists(folder_path):
         for root, dirs, files in os.walk(folder_path):
@@ -31,10 +30,11 @@ def load_permanent_pdfs_to_gemini():
                     file_path = os.path.join(root, filename)
                     try:
                         uploaded_file = genai.upload_file(file_path)
-                        gemini_files.append(uploaded_file)
+                        book_key = filename.replace('.pdf', '')
+                        gemini_files_dict[book_key] = uploaded_file # 책 이름을 키값으로 저장
                     except Exception as e:
                         print(f"업로드 실패 ({filename}): {e}")
-    return gemini_files
+    return gemini_files_dict
 
 st.set_page_config(page_title="English with Nora", page_icon="📚", layout="centered")
 
@@ -46,7 +46,6 @@ st.markdown("""
 <hr>
 """, unsafe_allow_html=True)
 
-# 3. 로그인
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_student = ""
@@ -65,13 +64,11 @@ if not st.session_state.logged_in:
         else:
             st.error("아이디나 비밀번호가 틀렸습니다. 선생님께 확인해 주세요!")
 
-    # 4. 선생님 전용 컨설팅 메뉴 (피드백 + 엑셀 연동)
     st.divider()
     with st.expander("⚙️ 관리자 전용 메뉴"):
         pw_input = st.text_input("선생님 비밀번호를 입력하세요", type="password", key="teacher_pw_out")
         if pw_input == st.secrets.get("TEACHER_PASSWORD", "nora"):
             st.success("인증 완료! 프리미엄 컨설팅 시스템이 활성화되었습니다.")
-            st.markdown("### 📊 학생 맞춤형 컨설팅 보고서 자동 생성")
             consulting_student_name = st.text_input("대상 학생 이름 (예: 김이정, 예비고2)")
             consulting_feedback = st.text_area("1. 누적 피드백을 모두 붙여넣으세요.", height=150)
             excel_files = st.file_uploader("2. 수치 데이터 엑셀 파일 업로드 (.xlsx, .csv)", type=['xlsx', 'xls', 'csv'], accept_multiple_files=True)
@@ -92,7 +89,6 @@ if not st.session_state.logged_in:
 
                     consulting_prompt = f"""
                     너는 전문 입시 컨설턴트 '노경혜 강사'야. 
-                    아래 [피드백]과 [엑셀 데이터]를 종합하여 마크다운 보고서를 작성해.
                     [목차] 1. 통합 성적 추이 및 향후 수업 내용 2. 수업방식 3. 예상 성취도 및 기간 4. 수업료 및 수업 정책
                     [대상 학생]: {consulting_student_name}
                     [피드백]: {consulting_feedback}
@@ -105,11 +101,9 @@ if not st.session_state.logged_in:
                         st.error(f"보고서 생성 중 오류 발생: {e}")
     st.stop() 
 
-# --- AI 기억 장착 ---
-with st.spinner("📚 선생님 자료를 AI가 세팅 중입니다..."):
-    permanent_pdf_files = load_permanent_pdfs_to_gemini()
+with st.spinner("📚 선생님 자료를 AI가 세팅 중입니다... (최초 1회)"):
+    permanent_pdf_files_dict = load_permanent_pdfs_to_gemini()
 
-# --- 학생 화면 ---
 st.success(f"환영합니다, {st.session_state.current_student} 학생! 😊")
 if st.button("로그아웃"):
     st.session_state.logged_in = False
@@ -118,7 +112,6 @@ if st.button("로그아웃"):
 
 st.divider()
 
-# 5. 지문 찾기 (드롭다운 패널 자동 생성)
 pdf_options = {}
 if os.path.exists("pdf_materials"):
     for root, dirs, files in os.walk("pdf_materials"):
@@ -179,7 +172,7 @@ if user_question:
         st.session_state.messages.append({"role": "user", "content": user_question})
 
         off_topic_rule = "영어 학습과 무관한 질문 시 짧게 거절해."
-        location_prompt = f"학생이 질문한 교재: [{selected_category} - {selected_book}], 지문 위치: [{textbook_unit}]" if textbook_unit else ""
+        location_prompt = f"학생이 질문한 위치: [{textbook_unit}]" if textbook_unit else ""
 
         if "1. 구문" in mode:
             system_prompt = f"전문 영어 조교야. {off_topic_rule} {location_prompt} PDF 자료에서 해당 지문을 찾아 1. 문법 분석 2. 다의어 설명. 질문: {user_question}"
@@ -194,8 +187,11 @@ if user_question:
             with st.spinner("노라 조교가 답변을 준비 중입니다..."):
                 try:
                     ai_input_contents = [system_prompt]
-                    if permanent_pdf_files:
-                        ai_input_contents.extend(permanent_pdf_files)
+                    
+                    # 🚨 [수정됨] 전체 PDF를 다 넣지 않고, '선택한 교재 딱 1권'만 골라서 AI에게 전달!
+                    if selected_book and selected_book in permanent_pdf_files_dict:
+                        ai_input_contents.append(permanent_pdf_files_dict[selected_book])
+                        
                     if uploaded_content:
                         ai_input_contents.append(uploaded_content)
 
