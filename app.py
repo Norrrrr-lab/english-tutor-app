@@ -54,7 +54,11 @@ book_custom_settings = {
     "기본값": {"u_label": "Unit", "u_max": 25, "q_label": "번", "q_max": 15}
 }
 
-st.set_page_config(page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", page_icon="📚", layout="centered")
+st.set_page_config(
+    page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", 
+    page_icon="📚", 
+    layout="centered"
+)
 st.markdown("<h2 style='text-align: center;'>📚 English with Nora_혼자서도 할 수 있다!<br>중/고등학생 내신대비 자습실</h2><hr>", unsafe_allow_html=True)
 
 if "user_db" not in st.session_state:
@@ -149,13 +153,81 @@ if pdf_options:
     
     book_setting = book_custom_settings.get(selected_display_book, book_custom_settings["기본값"])
     
+    # 코드가 잘리지 않도록 안전하게 변수 분리
+    u_lab = book_setting['u_label']
+    u_max = book_setting['u_max']
+    q_lab = book_setting['q_label']
+    q_max = book_setting['q_max']
+    
     col_unit, col_q = st.columns(2)
     with col_unit:
-        unit_list = [f"{i}{book_setting['u_label']}" for i in range(1, book_setting['u_max'] + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
-        selected_unit = st.selectbox(f"3) 단원 ({book_setting['u_label']}) 선택", ["선택하세요"] + unit_list)
+        unit_list = [f"{i}{u_lab}" for i in range(1, u_max + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
+        selected_unit = st.selectbox(f"3) 단원 ({u_lab}) 선택", ["선택하세요"] + unit_list)
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
             final_unit = st.text_input("단원을 직접 적어주세요")
 
     with col_q:
-        q_list = [f"{i}{book_setting['q_label']}" for i in range(1, book_setting['q_max
+        q_list = [f"{i}{q_lab}" for i in range(1, q_max + 1)] + ["전체 지문", "직접 입력 (타이핑)"]
+        selected_q = st.selectbox(f"4) 지문 번호 ({q_lab}) 선택", ["선택하세요"] + q_list)
+        final_q = selected_q
+        if selected_q == "직접 입력 (타이핑)":
+            final_q = st.text_input("지문 번호를 직접 적어주세요")
+    
+    textbook_unit = f"{final_unit} {final_q}"
+    
+    if "extracted_text" not in st.session_state:
+        st.session_state.extracted_text = ""
+    if "analysis_result" not in st.session_state:
+        st.session_state.analysis_result = ""
+
+    if st.button("✅ 선택한 지문 텍스트 확인하기"):
+        if selected_unit == "선택하세요" or selected_q == "선택하세요":
+            st.warning("단원과 번호를 모두 선택해주세요!")
+        else:
+            with st.spinner("PDF에서 지문을 읽어오는 중입니다..."):
+                try:
+                    extract_prompt = f"'{textbook_unit}'에 해당하는 영어 지문 원문(Text)만 정확히 추출해. 다른 사설이나 번역은 절대 포함하지 말고 영어 원문만 출력해."
+                    if selected_book in permanent_pdf_files_dict:
+                        target_pdf = permanent_pdf_files_dict[selected_book]
+                        response = model.generate_content([extract_prompt, target_pdf])
+                        st.session_state.extracted_text = response.text
+                        st.session_state.analysis_result = "" 
+                        st.rerun()
+                except Exception as e:
+                    st.error("지문을 불러오는 데 실패했습니다.")
+else:
+    st.info("등록된 교재가 없습니다.")
+
+if st.session_state.get("extracted_text"):
+    st.success("✨ 지문 로딩 완료!")
+    with st.expander("📖 불러온 지문 확인하기", expanded=True):
+        st.write(st.session_state.extracted_text)
+    
+    st.divider()
+    
+    with st.form("analysis_form"):
+        st.subheader("💡 2. 학습 모드 및 질문 입력")
+        mode = st.radio("원하는 분석 모드를 선택하세요:", [
+            "1. 구문 분석 + 초급 다의어 설명", 
+            "2. 주요 지문 2개 분석 + 중상급 유반의어 정리", 
+            "3. 전체 줄거리 시각화 구조도",
+            "4. 💬 자습 도우미에게 직접 질문하기 (자유 질문)"
+        ])
+
+        user_question = st.text_input("궁금한 점을 자유롭게 적어주세요 (4번 모드 선택 시 필수):")
+        submitted = st.form_submit_button("🚀 분석 실행 (확인)")
+
+    if submitted:
+        if "4." in mode and not user_question.strip():
+            st.warning("질문 내용을 입력해 주세요!")
+        else:
+            if credits_left != "무제한":
+                if st.session_state.user_db[st.session_state.current_student]["credits"] <= 0:
+                    st.error("🚨 무료 체험 횟수를 소진했습니다. 월 3,000원 이용권 결제가 필요합니다!")
+                    st.stop()
+                else:
+                    st.session_state.user_db[st.session_state.current_student]["credits"] -= 1
+
+            base_instruction = f"""
+            당신은 학생들의 자습을 완벽
