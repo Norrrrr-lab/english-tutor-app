@@ -17,19 +17,13 @@ except Exception:
 
 model = genai.GenerativeModel(valid_model_name)
 
-# --- 🚨 [NEW] 저작권 보호를 위한 '파일 이름 자동 세탁기' ---
+# --- 🚨 저작권 보호 및 중복 방지용 이름 세탁기 ---
 def clean_display_name(raw_name):
-    # 1. 쌤이 숨기고 싶은 자료 사이트 이름들을 여기에 적어두면 알아서 다 지워줍니다!
-    blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미', '교사용']
+    blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미']
     cleaned = raw_name
-    
     for word in blacklist:
-        # 대소문자 구분 없이 블랙리스트 단어 삭제
         cleaned = re.sub(word, '', cleaned, flags=re.IGNORECASE)
-        
-    # 2. [어쩌구], (어쩌구), _어쩌구 같은 불필요한 꼬리표 싹 다 지우기
     cleaned = re.sub(r'\[.*?\]|\(.*?\)|\_내지|\_통합본|\_생략된 지문|\_분석노트|\_정답', '', cleaned)
-    
     return cleaned.strip()
 
 @st.cache_resource(show_spinner=False)
@@ -38,6 +32,8 @@ def load_permanent_pdfs_to_gemini():
     folder_path = "pdf_materials" 
     if os.path.exists(folder_path):
         for root, dirs, files in os.walk(folder_path):
+            # 분석노트 등 핵심 자료가 먼저 덮어써지도록 정렬
+            files.sort(reverse=True) 
             for filename in files:
                 if filename.endswith(".pdf"):
                     file_path = os.path.join(root, filename)
@@ -49,16 +45,36 @@ def load_permanent_pdfs_to_gemini():
                         pass
     return gemini_files_dict
 
-st.set_page_config(page_title="English with Nora", page_icon="📚", layout="centered")
-st.markdown("<h2 style='text-align: center;'>📚 English with Nora_Assistant system</h2><hr>", unsafe_allow_html=True)
+# --- 🚨 [NEW] 교재별 단원 및 번호 맞춤 설정 ---
+# 여기에 쌤이 쓰시는 책의 특성을 적어두면 드롭다운이 알아서 변합니다!
+book_custom_settings = {
+    "2025 올림포스 영어독해의 기본2": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 10},
+    "2026 올림포스 9대 변유형": {"u_label": "Unit", "u_max": 10, "q_label": "번", "q_max": 8},
+    "수능특강light 영어독해연습": {"u_label": "강", "u_max": 12, "q_label": "번", "q_max": 12},
+    "수능특강 영어": {"u_label": "강", "u_max": 33, "q_label": "번", "q_max": 28},
+    "모의고사": {"q_label": "번","q_min": 18, "q_max": 45},
+    # 설정에 없는 책이 선택되면 아래 '기본값'이 적용됩니다.
+    "기본값": {"u_label": "Unit", "u_max": 20, "q_label": "번", "q_max": 30}
+}
 
+# 1. 페이지 세팅
+st.set_page_config(page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", page_icon="📚", layout="centered")
+st.markdown("<h2 style='text-align: center;'>📚 English with Nora_혼자서도 할 수 있다!<br>중/고등학생 내신대비 자습실</h2><hr>", unsafe_allow_html=True)
+
+# 2. 신규 학생 DB 추가
 if "user_db" not in st.session_state:
-    st.session_state.user_db = {"nora": {"pw": "1234", "credits": 999}}
+    st.session_state.user_db = {
+        "nora": {"pw": "1234", "credits": 999},
+        "오찬희": {"pw": "1234", "credits": 999},
+        "이은수": {"pw": "1234", "credits": 999},
+        "최창민": {"pw": "1234", "credits": 999}
+    }
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_student = ""
 
+# 3. 로그인 및 결제
 if not st.session_state.logged_in:
     tab_login, tab_signup, tab_find = st.tabs(["🔒 로그인", "📝 회원가입 (무료체험)", "🔍 ID/PW 찾기"])
     
@@ -81,7 +97,6 @@ if not st.session_state.logged_in:
                 
     with tab_signup:
         st.subheader("🚀 3회 무료 체험하기")
-        st.write("아이디를 만들고 노라 쌤의 프리미엄 AI 튜터를 체험해 보세요!")
         new_id = st.text_input("사용할 아이디:")
         new_pw = st.text_input("사용할 비밀번호:", type="password")
         if st.button("가입하고 체험 시작하기"):
@@ -89,16 +104,13 @@ if not st.session_state.logged_in:
                 st.warning("이미 존재하는 아이디입니다.")
             elif new_id and new_pw:
                 st.session_state.user_db[new_id] = {"pw": new_pw, "credits": 3}
-                st.success("✅ 가입 완료! [로그인] 탭에서 로그인해 주세요. (무료 체험 3회 지급)")
+                st.success("✅ 가입 완료! [로그인] 탭에서 로그인해 주세요.")
             else:
-                st.warning("아이디와 비밀번호를 모두 입력하세요.")
+                st.warning("정보를 모두 입력하세요.")
                 
     with tab_find:
-        st.info("비밀번호 분실 시 관리자(카카오톡 오픈채팅)에게 문의해 주세요.")
         payment_link = "https://toss.me/노라쌤결제링크"
-        # --- 🚨 요금 3,000원으로 수정됨 ---
         st.markdown(f"**체험이 끝났다면?** 👉 [월 3,000원 정기구독 신청하기]({payment_link})")
-    
     st.stop()
 
 with st.spinner("📚 자료 세팅 중... (최초 1회)"):
@@ -126,32 +138,39 @@ if os.path.exists("pdf_materials"):
         rel_path = os.path.relpath(root, "pdf_materials")
         category_name = "미분류 자료" if rel_path == "." else rel_path.replace("\\", "/")
         pdf_files = [f.replace('.pdf', '') for f in files if f.endswith(".pdf")]
+        
         if pdf_files:
-            pdf_options[category_name] = pdf_files
+            pdf_options[category_name] = []
             for f in pdf_files:
-                pdf_display_mapping[clean_display_name(f)] = f
+                clean_name = clean_display_name(f)
+                # 중복 제거 로직: 화면에는 딱 하나만 뜨도록 처리
+                if clean_name not in pdf_options[category_name]:
+                    pdf_options[category_name].append(clean_name)
+                    pdf_display_mapping[clean_name] = f 
 
 st.subheader("🔍 1. 분석할 지문 불러오기")
 
 if pdf_options:
     selected_category = st.selectbox("1) 출판사/분류 선택", list(pdf_options.keys()))
-    raw_books = pdf_options[selected_category]
-    display_books = [clean_display_name(b) for b in raw_books]
+    display_books = pdf_options[selected_category]
     selected_display_book = st.selectbox("2) 교재명 선택", display_books)
     selected_book = pdf_display_mapping[selected_display_book]
     
+    # --- 🚨 [NEW] 교재 맞춤형 단원/번호 자동 생성 로직 ---
+    book_setting = book_custom_settings.get(selected_display_book, book_custom_settings["기본값"])
+    
     col_unit, col_q = st.columns(2)
     with col_unit:
-        unit_list = [f"{i}강 (Unit {i})" for i in range(1, 31)] + ["Test/모의고사", "기타", "직접 입력 (타이핑)"]
-        selected_unit = st.selectbox("3) 단원 선택", ["선택하세요"] + unit_list)
+        unit_list = [f"{i}{book_setting['u_label']}" for i in range(1, book_setting['u_max'] + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
+        selected_unit = st.selectbox(f"3) 단원 ({book_setting['u_label']}) 선택", ["선택하세요"] + unit_list)
         
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
             final_unit = st.text_input("단원을 직접 적어주세요 (예: Mini Test 1)")
 
     with col_q:
-        q_list = [f"{i}번" for i in range(1, 21)] + ["전체 지문", "직접 입력 (타이핑)"]
-        selected_q = st.selectbox("4) 지문 번호 선택", ["선택하세요"] + q_list)
+        q_list = [f"{i}{book_setting['q_label']}" for i in range(1, book_setting['q_max'] + 1)] + ["전체 지문", "직접 입력 (타이핑)"]
+        selected_q = st.selectbox(f"4) 지문 번호 ({book_setting['q_label']}) 선택", ["선택하세요"] + q_list)
         
         final_q = selected_q
         if selected_q == "직접 입력 (타이핑)":
@@ -190,9 +209,9 @@ if st.session_state.get("extracted_text"):
     
     st.subheader("💡 2. 학습 모드 및 질문 입력")
     mode = st.radio("원하는 분석 모드를 선택하세요:", [
-        "1. 구문 분석 + 초급 동음이의어/다의어 정리", 
-        "2. 주요 문장 2개 + 중상급 유반의어 정리", 
-        "3. 전체 줄거리 구조화 (도식/요약)",
+        "1. 구문 분석 + 초급 다의어 설명", 
+        "2. 주요 지문 2개 분석 + 중상급 유반의어 정리", 
+        "3. 전체 줄거리 시각화 구조도",
         "4. 💬 조교에게 직접 질문하기 (하소연 및 자유 질문)"
     ])
 
@@ -206,24 +225,40 @@ if st.session_state.get("extracted_text"):
         else:
             if credits_left != "무제한":
                 if st.session_state.user_db[st.session_state.current_student]["credits"] <= 0:
-                    # --- 🚨 요금 3,000원으로 수정됨 ---
                     st.error("🚨 무료 체험 횟수를 모두 소진했습니다. 월 3,000원 이용권 결제가 필요합니다!")
                     st.stop()
                 else:
                     st.session_state.user_db[st.session_state.current_student]["credits"] -= 1
 
+            # --- 🚨 [NEW] 시각적/디자인적 분석 프롬프트 세팅 ---
             base_instruction = f"""
-            당신은 친절한 영어 조교입니다. 반드시 제공된 [영어 지문] 내용만을 바탕으로 대답하세요.
+            당신은 친절한 영어 1타 강사 조교입니다. 제공된 [영어 지문] 내용만을 바탕으로 답변하세요.
             [영어 지문]:
             {st.session_state.extracted_text}
             """
 
             if "1. 구문" in mode:
-                system_prompt = base_instruction + "\n[명령]: 지문을 바탕으로 1. 문법/구문 분석 2. 다의어 설명을 작성하세요."
+                system_prompt = base_instruction + """
+                [명령]
+                1. 학생이 전체 지문을 한 줄 씩 읽을 수 있도록 번역을 제공하되, 반드시 HTML 색상 태그를 사용하여 문장 성분을 시각적으로 쪼개서 분석하세요. 절대 줄글로 길게 쓰지 마세요.
+                * 예시 규칙: <font color='blue'>주어(S)</font>, <font color='red'>동사(V)</font>, <font color='green'>목적어/보어(O/C)</font>, <font color='gray'>수식어(M)</font>
+                2. 지문 내의 핵심 기초 단어를 3개 선정하여 '초급 다의어(다양한 의미)'를 쉽게 설명해 주세요.
+                """
             elif "2. 주요" in mode:
-                system_prompt = base_instruction + "\n[명령]: 지문을 바탕으로 1. 핵심 문장 해석 2. 유반의어 표를 작성하세요."
+                system_prompt = base_instruction + """
+                [명령]
+                1. 전체 지문의 한 줄 해석은 생략하세요. 대신, 지문에서 딱 2개의 문장만 꼽아서 분석하세요.
+                   - 문장 A: 줄거리와 주제를 관통하는 핵심 문장
+                   - 문장 B: 문법적으로 가장 복잡하고 어려운 구문
+                2. 이 2개의 문장은 절대 줄글로 설명하지 말고, 시중 고급 분석지처럼 HTML 색상 태그(<font color='blue'>S</font>, <font color='red'>V</font> 등)를 떡칠하여 성분을 시각적으로 명확하게 뜯어주세요.
+                3. 지문의 핵심 단어 3개를 뽑고, 미국 Merriam-Webster 사전 기준 가장 연관성이 높은(가장 진하게 표시되는) '중상급 수준'의 동의어(Synonyms)와 반의어(Antonyms)를 표로 정리해 주세요.
+                """
             elif "3. 전체" in mode:
-                system_prompt = base_instruction + "\n[명령]: 지문을 바탕으로 1. 논리 구조도 2. 핵심 키워드를 정리하세요."
+                system_prompt = base_instruction + """
+                [명령]
+                1. 줄글 요약은 금지합니다. Canva나 인포그래픽 포스터를 보듯, 마크다운의 표, 인용구(>), 이모지를 적극 활용하여 지문의 전체 흐름을 '시각적 구조도'로 한 장에 그려주세요.
+                2. 주제를 관통하는 핵심 키워드 3~4개를 뽑아 눈에 띄게 배치하고, 각 키워드의 유반의어 1개씩만 곁들여 주세요.
+                """
             else:
                 system_prompt = base_instruction + f"\n[명령]: 학생의 다음 질문/하소연에 다정하고 전문적으로 답변하세요. \n[학생 질문]: {user_question}"
 
@@ -231,6 +266,6 @@ if st.session_state.get("extracted_text"):
                 try:
                     response = model.generate_content(system_prompt)
                     st.info("💡 **조교의 답변:**")
-                    st.markdown(response.text)
+                    st.markdown(response.text, unsafe_allow_html=True)
                 except Exception as e:
                     st.error("답변 생성 중 오류가 발생했습니다.")
