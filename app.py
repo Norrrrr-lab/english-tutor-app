@@ -17,8 +17,19 @@ except Exception:
 
 model = genai.GenerativeModel(valid_model_name)
 
+# --- 🚨 [NEW] 저작권 보호를 위한 '파일 이름 자동 세탁기' ---
 def clean_display_name(raw_name):
-    cleaned = re.sub(r'\[.*?\]|\(.*?\)|\_내지|\_통합본|\_생략된 지문', '', raw_name)
+    # 1. 쌤이 숨기고 싶은 자료 사이트 이름들을 여기에 적어두면 알아서 다 지워줍니다!
+    blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미', '교사용']
+    cleaned = raw_name
+    
+    for word in blacklist:
+        # 대소문자 구분 없이 블랙리스트 단어 삭제
+        cleaned = re.sub(word, '', cleaned, flags=re.IGNORECASE)
+        
+    # 2. [어쩌구], (어쩌구), _어쩌구 같은 불필요한 꼬리표 싹 다 지우기
+    cleaned = re.sub(r'\[.*?\]|\(.*?\)|\_내지|\_통합본|\_생략된 지문|\_분석노트|\_정답', '', cleaned)
+    
     return cleaned.strip()
 
 @st.cache_resource(show_spinner=False)
@@ -37,8 +48,6 @@ def load_permanent_pdfs_to_gemini():
                     except Exception as e:
                         pass
     return gemini_files_dict
-
-# 🚨 골치 아팠던 book_config 삭제! 앱이 알아서 범용적으로 대응합니다.
 
 st.set_page_config(page_title="English with Nora", page_icon="📚", layout="centered")
 st.markdown("<h2 style='text-align: center;'>📚 English with Nora_Assistant system</h2><hr>", unsafe_allow_html=True)
@@ -87,7 +96,8 @@ if not st.session_state.logged_in:
     with tab_find:
         st.info("비밀번호 분실 시 관리자(카카오톡 오픈채팅)에게 문의해 주세요.")
         payment_link = "https://toss.me/노라쌤결제링크"
-        st.markdown(f"**체험이 끝났다면?** 👉 [월 7,000원 정기구독 신청하기]({payment_link})")
+        # --- 🚨 요금 3,000원으로 수정됨 ---
+        st.markdown(f"**체험이 끝났다면?** 👉 [월 3,000원 정기구독 신청하기]({payment_link})")
     
     st.stop()
 
@@ -130,13 +140,11 @@ if pdf_options:
     selected_display_book = st.selectbox("2) 교재명 선택", display_books)
     selected_book = pdf_display_mapping[selected_display_book]
     
-    # --- 🚨 [NEW] 유지보수 0%의 하이브리드 드롭다운 ---
     col_unit, col_q = st.columns(2)
     with col_unit:
         unit_list = [f"{i}강 (Unit {i})" for i in range(1, 31)] + ["Test/모의고사", "기타", "직접 입력 (타이핑)"]
         selected_unit = st.selectbox("3) 단원 선택", ["선택하세요"] + unit_list)
         
-        # '직접 입력'을 고르면 타자 치는 칸이 마법처럼 나타남!
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
             final_unit = st.text_input("단원을 직접 적어주세요 (예: Mini Test 1)")
@@ -189,3 +197,40 @@ if st.session_state.get("extracted_text"):
     ])
 
     user_question = ""
+    if "4." in mode:
+        user_question = st.text_input("궁금한 점이나 하소연을 자유롭게 적어주세요!")
+
+    if st.button("🚀 분석 실행 (확인)"):
+        if "4." in mode and not user_question.strip():
+            st.warning("질문 내용을 입력해 주세요!")
+        else:
+            if credits_left != "무제한":
+                if st.session_state.user_db[st.session_state.current_student]["credits"] <= 0:
+                    # --- 🚨 요금 3,000원으로 수정됨 ---
+                    st.error("🚨 무료 체험 횟수를 모두 소진했습니다. 월 3,000원 이용권 결제가 필요합니다!")
+                    st.stop()
+                else:
+                    st.session_state.user_db[st.session_state.current_student]["credits"] -= 1
+
+            base_instruction = f"""
+            당신은 친절한 영어 조교입니다. 반드시 제공된 [영어 지문] 내용만을 바탕으로 대답하세요.
+            [영어 지문]:
+            {st.session_state.extracted_text}
+            """
+
+            if "1. 구문" in mode:
+                system_prompt = base_instruction + "\n[명령]: 지문을 바탕으로 1. 문법/구문 분석 2. 다의어 설명을 작성하세요."
+            elif "2. 주요" in mode:
+                system_prompt = base_instruction + "\n[명령]: 지문을 바탕으로 1. 핵심 문장 해석 2. 유반의어 표를 작성하세요."
+            elif "3. 전체" in mode:
+                system_prompt = base_instruction + "\n[명령]: 지문을 바탕으로 1. 논리 구조도 2. 핵심 키워드를 정리하세요."
+            else:
+                system_prompt = base_instruction + f"\n[명령]: 학생의 다음 질문/하소연에 다정하고 전문적으로 답변하세요. \n[학생 질문]: {user_question}"
+
+            with st.spinner("답변을 생성 중입니다..."):
+                try:
+                    response = model.generate_content(system_prompt)
+                    st.info("💡 **조교의 답변:**")
+                    st.markdown(response.text)
+                except Exception as e:
+                    st.error("답변 생성 중 오류가 발생했습니다.")
