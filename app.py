@@ -17,7 +17,6 @@ except Exception:
 
 model = genai.GenerativeModel(valid_model_name)
 
-# --- 저작권 보호를 위한 교재명 세탁기 ---
 def clean_display_name(raw_name):
     blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미']
     cleaned = raw_name
@@ -45,7 +44,6 @@ def load_permanent_pdfs_to_gemini():
                         pass
     return gemini_files_dict
 
-# --- 교재별 맞춤형 단원/번호 세팅 ---
 book_custom_settings = {
     "올림포스 영어독해의 기본1": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 12},
     "올림포스 영어독해의 기본2": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 10},
@@ -54,11 +52,7 @@ book_custom_settings = {
     "기본값": {"u_label": "Unit", "u_max": 25, "q_label": "번", "q_max": 15}
 }
 
-st.set_page_config(
-    page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", 
-    page_icon="📚", 
-    layout="centered"
-)
+st.set_page_config(page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", page_icon="📚", layout="centered")
 st.markdown("<h2 style='text-align: center;'>📚 English with Nora_혼자서도 할 수 있다!<br>중/고등학생 내신대비 자습실</h2><hr>", unsafe_allow_html=True)
 
 if "user_db" not in st.session_state:
@@ -68,7 +62,6 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_student = ""
 
-# --- 통합 로그인 시스템 ---
 if not st.session_state.logged_in:
     tab_login, tab_signup, tab_find = st.tabs(["🔒 로그인", "📝 회원가입 (무료체험)", "🔍 ID/PW 찾기"])
     
@@ -124,7 +117,6 @@ with col_logout2:
         st.rerun()
 st.divider()
 
-# --- 자동 폴더 스캔 및 메뉴 생성 ---
 pdf_options = {}
 pdf_display_mapping = {}
 
@@ -153,23 +145,17 @@ if pdf_options:
     
     book_setting = book_custom_settings.get(selected_display_book, book_custom_settings["기본값"])
     
-    # 코드가 잘리지 않도록 안전하게 변수 분리
-    u_lab = book_setting['u_label']
-    u_max = book_setting['u_max']
-    q_lab = book_setting['q_label']
-    q_max = book_setting['q_max']
-    
     col_unit, col_q = st.columns(2)
     with col_unit:
-        unit_list = [f"{i}{u_lab}" for i in range(1, u_max + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
-        selected_unit = st.selectbox(f"3) 단원 ({u_lab}) 선택", ["선택하세요"] + unit_list)
+        unit_list = [f"{i}{book_setting['u_label']}" for i in range(1, book_setting['u_max'] + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
+        selected_unit = st.selectbox(f"3) 단원 ({book_setting['u_label']}) 선택", ["선택하세요"] + unit_list)
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
             final_unit = st.text_input("단원을 직접 적어주세요")
 
     with col_q:
-        q_list = [f"{i}{q_lab}" for i in range(1, q_max + 1)] + ["전체 지문", "직접 입력 (타이핑)"]
-        selected_q = st.selectbox(f"4) 지문 번호 ({q_lab}) 선택", ["선택하세요"] + q_list)
+        q_list = [f"{i}{book_setting['q_label']}" for i in range(1, book_setting['q_max'] + 1)] + ["전체 지문", "직접 입력 (타이핑)"]
+        selected_q = st.selectbox(f"4) 지문 번호 ({book_setting['q_label']}) 선택", ["선택하세요"] + q_list)
         final_q = selected_q
         if selected_q == "직접 입력 (타이핑)":
             final_q = st.text_input("지문 번호를 직접 적어주세요")
@@ -230,4 +216,46 @@ if st.session_state.get("extracted_text"):
                     st.session_state.user_db[st.session_state.current_student]["credits"] -= 1
 
             base_instruction = f"""
-            당신은 학생들의 자습을 완벽
+            당신은 학생들의 자습을 완벽하게 서포트하는 유능한 '자습 도우미'입니다. 
+            반드시 제공된 [영어 지문] 내용만을 바탕으로 답변해야 하며, 존댓말을 사용하세요.
+            [영어 지문]:
+            {st.session_state.extracted_text}
+            """
+
+            if "1. 구문" in mode:
+                system_prompt = base_instruction + """
+                [출력 명령 - 시중 최고급 구문 워크북 스타일]
+                1. 지문에 존재하는 모든 영문장을 한 문장씩 행 단위로 깔끔히 격리 배치하고 바로 아래에 1:1 대응하는 한글 번역을 쌍으로 매칭하세요.
+                2. 줄글로 풀어쓰는 난잡한 분석은 엄금합니다. 영문장 내부의 핵심 구조를 명확한 기호구획([ ], ( ))으로 가두어 시각화하고, 복잡한 구문 성분을 기호 하단에 표 형태로 단답형으로 정리하세요.
+                3. 지문 내에서 다의어 성격이 강한 기초 핵심 단어 3개를 엄선하여, '단어 본질적 개념', '본 지문 내 의미', '기타 다의어 확장 의미'를 마크다운 표로 정리하세요.
+                """
+            elif "2. 주요" in mode:
+                system_prompt = base_instruction + """
+                [출력 명령 - 2대 핵심 문장 픽 박스 & 유반의어 데이터]
+                1. 지문 전체 문장 해석은 누락시키고, 단 2개의 극대화된 핵심 문장만 엄선하여 전용 분석 박스를 구현하세요. (문장1: 줄거리 핵심, 문장2: 문법 복잡)
+                2. 이 2개의 문장은 줄글 해설을 피하고, 아래의 가독성 높은 구획화 구조로 완전히 해체하여 표기하세요.
+                   * [원본 영문장 명시] -> [구조 격파 기호 분할 단락] -> [어법 킬러 포인트 요약]
+                3. 핵심 키워드 3개를 추출하고, Merriam-Webster 사전 기준 최우선 순위의 동의어(Synonyms)와 반의어(Antonyms)를 표로 가공해 내세요.
+                """
+            elif "3. 전체" in mode:
+                system_prompt = base_instruction + """
+                [출력 명령 - 철저한 한글 중심 인포그래픽 흐름도 디자인]
+                1. 영어 중심의 나열이나 단순 아이콘 배치를 금지합니다. 해설 구조 전체를 '한글 중심'으로 가공하세요.
+                2. 지문의 흐름 및 논리 구조를 마크다운 다이어그램 서식 블록으로 가시화하세요.
+                   - 예시: [ 도입 ] ➔ [ 전개 ] ➔ [ 심화 ] ➔ [ 결론 ]
+                   - 각 단계 내부 상자에는 인과관계를 1~2줄 요약 텍스트로 기입하세요.
+                3. 최종 하단 영역에는 지문의 대의를 관통하는 핵심 테마 키워드 3개를 선정하고, 유반의어를 곁들인 '한글 키워드 블록 리스트'를 만드세요.
+                """
+            else:
+                system_prompt = base_instruction + f"\n[명령]: 학생의 다음 구체적인 자유 질문이나 자습 중 애로사항에 대해 명쾌한 해결책을 건네세요. \n[학생 질문]: {user_question}"
+
+            with st.spinner("자습실 도우미가 분석지를 정교하게 빌드 중입니다..."):
+                try:
+                    response = model.generate_content(system_prompt)
+                    st.session_state.analysis_result = response.text
+                except Exception as e:
+                    st.error("해설을 생성하는 과정에서 에러가 발생했습니다.")
+    
+    if st.session_state.get("analysis_result"):
+        st.info("📌 **자습실 해설:**")
+        st.markdown(st.session_state.analysis_result, unsafe_allow_html=True)
