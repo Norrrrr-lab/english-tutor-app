@@ -17,7 +17,6 @@ except Exception:
 
 model = genai.GenerativeModel(valid_model_name)
 
-# --- 🚨 저작권 보호 및 중복 방지용 이름 세탁기 ---
 def clean_display_name(raw_name):
     blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미']
     cleaned = raw_name
@@ -32,7 +31,6 @@ def load_permanent_pdfs_to_gemini():
     folder_path = "pdf_materials" 
     if os.path.exists(folder_path):
         for root, dirs, files in os.walk(folder_path):
-            # 분석노트 등 핵심 자료가 먼저 덮어써지도록 정렬
             files.sort(reverse=True) 
             for filename in files:
                 if filename.endswith(".pdf"):
@@ -45,36 +43,16 @@ def load_permanent_pdfs_to_gemini():
                         pass
     return gemini_files_dict
 
-# --- 🚨 [NEW] 교재별 단원 및 번호 맞춤 설정 ---
-# 여기에 쌤이 쓰시는 책의 특성을 적어두면 드롭다운이 알아서 변합니다!
-book_custom_settings = {
-    "2025 올림포스 영어독해의 기본2": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 10},
-    "2026 올림포스 9대 변유형": {"u_label": "Unit", "u_max": 10, "q_label": "번", "q_max": 8},
-    "수능특강light 영어독해연습": {"u_label": "강", "u_max": 12, "q_label": "번", "q_max": 12},
-    "수능특강 영어": {"u_label": "강", "u_max": 33, "q_label": "번", "q_max": 28},
-    "모의고사": {"q_label": "번","q_min": 18, "q_max": 45},
-    # 설정에 없는 책이 선택되면 아래 '기본값'이 적용됩니다.
-    "기본값": {"u_label": "Unit", "u_max": 20, "q_label": "번", "q_max": 30}
-}
-
-# 1. 페이지 세팅
+# --- 🚨 타이틀 및 헤더 변경 완료 ---
 st.set_page_config(page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", page_icon="📚", layout="centered")
 st.markdown("<h2 style='text-align: center;'>📚 English with Nora_혼자서도 할 수 있다!<br>중/고등학생 내신대비 자습실</h2><hr>", unsafe_allow_html=True)
 
-# 2. 신규 학생 DB 추가
-if "user_db" not in st.session_state:
-    st.session_state.user_db = {
-        "nora": {"pw": "1234", "credits": 999},
-        "오찬희": {"pw": "1234", "credits": 999},
-        "이은수": {"pw": "1234", "credits": 999},
-        "최창민": {"pw": "1234", "credits": 999}
     }
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_student = ""
 
-# 3. 로그인 및 결제
 if not st.session_state.logged_in:
     tab_login, tab_signup, tab_find = st.tabs(["🔒 로그인", "📝 회원가입 (무료체험)", "🔍 ID/PW 찾기"])
     
@@ -140,10 +118,11 @@ if os.path.exists("pdf_materials"):
         pdf_files = [f.replace('.pdf', '') for f in files if f.endswith(".pdf")]
         
         if pdf_files:
-            pdf_options[category_name] = []
+            if category_name not in pdf_options:
+                pdf_options[category_name] = []
             for f in pdf_files:
                 clean_name = clean_display_name(f)
-                # 중복 제거 로직: 화면에는 딱 하나만 뜨도록 처리
+                # --- 🚨 교재명 선택 시 중복 노출 전면 제거 ---
                 if clean_name not in pdf_options[category_name]:
                     pdf_options[category_name].append(clean_name)
                     pdf_display_mapping[clean_name] = f 
@@ -156,25 +135,22 @@ if pdf_options:
     selected_display_book = st.selectbox("2) 교재명 선택", display_books)
     selected_book = pdf_display_mapping[selected_display_book]
     
-    # --- 🚨 [NEW] 교재 맞춤형 단원/번호 자동 생성 로직 ---
-    book_setting = book_custom_settings.get(selected_display_book, book_custom_settings["기본값"])
-    
     col_unit, col_q = st.columns(2)
     with col_unit:
-        unit_list = [f"{i}{book_setting['u_label']}" for i in range(1, book_setting['u_max'] + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
-        selected_unit = st.selectbox(f"3) 단원 ({book_setting['u_label']}) 선택", ["선택하세요"] + unit_list)
+        unit_list = [f"{i}강 (Unit {i})" for i in range(1, 31)] + ["Test/모의고사", "기타", "직접 입력 (타이핑)"]
+        selected_unit = st.selectbox("3) 단원 선택", ["선택하세요"] + unit_list)
         
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
-            final_unit = st.text_input("단원을 직접 적어주세요 (예: Mini Test 1)")
+            final_unit = st.text_input("단원을 직접 적어주세요")
 
     with col_q:
-        q_list = [f"{i}{book_setting['q_label']}" for i in range(1, book_setting['q_max'] + 1)] + ["전체 지문", "직접 입력 (타이핑)"]
-        selected_q = st.selectbox(f"4) 지문 번호 ({book_setting['q_label']}) 선택", ["선택하세요"] + q_list)
+        q_list = [f"{i}번" for i in range(1, 21)] + ["전체 지문", "직접 입력 (타이핑)"]
+        selected_q = st.selectbox("4) 지문 번호 선택", ["선택하세요"] + q_list)
         
         final_q = selected_q
         if selected_q == "직접 입력 (타이핑)":
-            final_q = st.text_input("지문 번호를 직접 적어주세요 (예: Reading 1)")
+            final_q = st.text_input("지문 번호를 직접 적어주세요")
     
     textbook_unit = f"{final_unit} {final_q}"
     
@@ -184,8 +160,6 @@ if pdf_options:
     if st.button("✅ 선택한 지문 텍스트 확인하기"):
         if selected_unit == "선택하세요" or selected_q == "선택하세요":
             st.warning("단원과 번호를 모두 선택해주세요!")
-        elif selected_unit == "직접 입력 (타이핑)" and not final_unit.strip():
-             st.warning("단원을 직접 입력해주세요!")
         else:
             with st.spinner("PDF에서 지문을 읽어오는 중입니다..."):
                 try:
@@ -212,7 +186,7 @@ if st.session_state.get("extracted_text"):
         "1. 구문 분석 + 초급 다의어 설명", 
         "2. 주요 지문 2개 분석 + 중상급 유반의어 정리", 
         "3. 전체 줄거리 시각화 구조도",
-        "4. 💬 조교에게 직접 질문하기 (하소연 및 자유 질문)"
+        "4. 💬 자습 도우미에게 직접 질문하기 (하소연 및 자유 질문)"
     ])
 
     user_question = ""
@@ -225,47 +199,54 @@ if st.session_state.get("extracted_text"):
         else:
             if credits_left != "무제한":
                 if st.session_state.user_db[st.session_state.current_student]["credits"] <= 0:
-                    st.error("🚨 무료 체험 횟수를 모두 소진했습니다. 월 3,000원 이용권 결제가 필요합니다!")
+                    st.error("🚨 무료 체험 횟수를 소진했습니다 이용권 결제가 필요합니다!")
                     st.stop()
                 else:
                     st.session_state.user_db[st.session_state.current_student]["credits"] -= 1
 
-            # --- 🚨 [NEW] 시각적/디자인적 분석 프롬프트 세팅 ---
+            # --- 🚨 [Wording & 명칭 변경 완료] 자습 도우미 지정 ---
             base_instruction = f"""
-            당신은 친절한 영어 1타 강사 조교입니다. 제공된 [영어 지문] 내용만을 바탕으로 답변하세요.
+            당신은 학생들의 자습을 완벽하게 서포트하는 유능한 '자습 도우미'입니다. 
+            반드시 제공된 [영어 지문] 내용만을 바탕으로 답변해야 하며, 존댓말을 사용하세요.
             [영어 지문]:
             {st.session_state.extracted_text}
             """
 
+            # --- 🚨 [구조 개편] 시중 워크북/인포그래픽 스타일 레이아웃 프롬프트 ---
             if "1. 구문" in mode:
                 system_prompt = base_instruction + """
-                [명령]
-                1. 학생이 전체 지문을 한 줄 씩 읽을 수 있도록 번역을 제공하되, 반드시 HTML 색상 태그를 사용하여 문장 성분을 시각적으로 쪼개서 분석하세요. 절대 줄글로 길게 쓰지 마세요.
-                * 예시 규칙: <font color='blue'>주어(S)</font>, <font color='red'>동사(V)</font>, <font color='green'>목적어/보어(O/C)</font>, <font color='gray'>수식어(M)</font>
-                2. 지문 내의 핵심 기초 단어를 3개 선정하여 '초급 다의어(다양한 의미)'를 쉽게 설명해 주세요.
+                [출력 명령 - 시중 최고급 구문 워크북 스타일]
+                1. 지문의 모든 영문장을 한 줄씩 나열하고 바로 밑에 깔끔한 한글 해석을 붙이세요.
+                2. 줄글로 주절주절 분석하지 마세요. 각 문장마다 핵심 구조(절, 수식어구)를 대괄호([ ]), 소괄호(( )) 등으로 명확히 구획화하여 표기하고 구조적 특징을 단답형식으로 정돈하여 표기하세요.
+                3. 지문에서 다의어 성격이 강한 기초 어휘 3개를 엄선하여 단어의 본질적 개념과 본 지문에서 쓰인 의미, 그리고 다른 핵심 다의어 뜻을 일목요연한 마크다운 표(Table)로 정리하세요.
                 """
             elif "2. 주요" in mode:
                 system_prompt = base_instruction + """
-                [명령]
-                1. 전체 지문의 한 줄 해석은 생략하세요. 대신, 지문에서 딱 2개의 문장만 꼽아서 분석하세요.
-                   - 문장 A: 줄거리와 주제를 관통하는 핵심 문장
-                   - 문장 B: 문법적으로 가장 복잡하고 어려운 구문
-                2. 이 2개의 문장은 절대 줄글로 설명하지 말고, 시중 고급 분석지처럼 HTML 색상 태그(<font color='blue'>S</font>, <font color='red'>V</font> 등)를 떡칠하여 성분을 시각적으로 명확하게 뜯어주세요.
-                3. 지문의 핵심 단어 3개를 뽑고, 미국 Merriam-Webster 사전 기준 가장 연관성이 높은(가장 진하게 표시되는) '중상급 수준'의 동의어(Synonyms)와 반의어(Antonyms)를 표로 정리해 주세요.
+                [출력 명령 - 2대 핵심 지문 픽 및 Merriam-Webster 유반의어]
+                1. 지문 전체 해석은 과감히 생략하세요. 오직 딱 2개의 핵심 문장만 선정하여 분석 박스를 만드세요.
+                   - 문장 1 (줄거리 핵심): 지문의 주제 및 스토리를 관통하는 가장 중요한 문장
+                   - 문장 2 (문법 복잡): 구조적으로 가장 까다롭고 문법 요소가 밀집된 문장
+                2. 선정한 각 문장은 아래 형태로 마크다운 코드 블록이나 가독성 높은 구획화 표기를 사용하여 시각적으로 완벽히 뜯어내세요.
+                   - [원본 문장] -> [구조 격파 분할 분석] -> [핵심 문법적 포인트 요약]
+                3. 지문의 핵심 키워드 3개를 선정하고, 미국 최정상 사전인 'Merriam-Webster' 기준에 맞추어 관련도가 가장 깊은(가장 진하게 표시되는 핵심 단어들) 동의어(Synonyms)와 반의어(Antonyms)를 체계적인 표로 구성하세요.
                 """
             elif "3. 전체" in mode:
                 system_prompt = base_instruction + """
-                [명령]
-                1. 줄글 요약은 금지합니다. Canva나 인포그래픽 포스터를 보듯, 마크다운의 표, 인용구(>), 이모지를 적극 활용하여 지문의 전체 흐름을 '시각적 구조도'로 한 장에 그려주세요.
-                2. 주제를 관통하는 핵심 키워드 3~4개를 뽑아 눈에 띄게 배치하고, 각 키워드의 유반의어 1개씩만 곁들여 주세요.
+                [출력 명령 - 한글 인포그래픽 블록 흐름도]
+                1. 영어나 아이콘 나열식 요약은 학생들의 직관적 인지를 방해하므로 절대 금지합니다. 철저히 '한글 중심'으로 작성하세요.
+                2. 지문의 스토리 전개 과정을 마치 노트북LM이나 캔바의 포스터처럼 한눈에 들어오는 가로/세로 방향의 블록 다이어그램 형태로 텍스트 구조화 마크다운을 만드세요.
+                   - 예시: [ 도입 단계 ] ➔ [ 전개/원인 발생 ] ➔ [ 핵심 심화 ] ➔ [ 최종 결론 ]
+                   - 각 단계 내부에는 핵심 사건과 논리 구조를 1~2줄 요약형태로 꽉 차게 정리하세요.
+                3. 마지막 하단에는 이 지문의 핵심 테마 단어 3개를 선별하여 배치하고, 각 단어의 핵심 유반의어를 1~2개씩 곁들여 키워드 블록 리스트를 만드세요.
                 """
             else:
-                system_prompt = base_instruction + f"\n[명령]: 학생의 다음 질문/하소연에 다정하고 전문적으로 답변하세요. \n[학생 질문]: {user_question}"
+                system_prompt = base_instruction + f"\n[명령]: 학생의 다음 자유 질문이나 자습 하소연에 대하여 정성을 다해 해결책과 공감을 제공하세요. \n[학생 질문]: {user_question}"
 
-            with st.spinner("답변을 생성 중입니다..."):
+            with st.spinner("자습 도우미가 분석지를 정교하게 생성 중입니다..."):
                 try:
                     response = model.generate_content(system_prompt)
-                    st.info("💡 **조교의 답변:**")
+                    # --- 🚨 [Wording 변경 완료] 조교의 답변 -> 해설 ---
+                    st.info("📌 **자습실 해설:**")
                     st.markdown(response.text, unsafe_allow_html=True)
                 except Exception as e:
-                    st.error("답변 생성 중 오류가 발생했습니다.")
+                    st.error("해설 생성 중 오류가 발생했습니다.")
