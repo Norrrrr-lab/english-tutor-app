@@ -93,4 +93,56 @@ if not st.session_state.logged_in:
         new_pw = st.text_input("사용할 비밀번호:", type="password")
         if st.button("가입하고 체험 시작하기"):
             if new_id in st.session_state.user_db or st.secrets.get(f"{new_id}_PW"):
-                st.warning("이미 존재하는 아이디
+                st.warning("이미 존재하는 아이디입니다.")
+            elif new_id and new_pw:
+                st.session_state.user_db[new_id] = {"pw": new_pw, "credits": 3}
+                st.success("✅ 가입 완료! [로그인] 탭에서 로그인해 주세요.")
+            else:
+                st.warning("정보를 모두 입력하세요.")
+                
+    with tab_find:
+        payment_link = "https://toss.me/노라쌤결제링크"
+        st.markdown(f"**체험이 끝났다면?** 👉 [월 3,000원 정기구독 신청하기]({payment_link})")
+    st.stop()
+
+with st.spinner("📚 자습실 자료 동기화 중..."):
+    permanent_pdf_files_dict = load_permanent_pdfs_to_gemini()
+
+credits_left = st.session_state.user_db.get(st.session_state.current_student, {}).get("credits", "무제한")
+
+col_logout1, col_logout2 = st.columns([8, 2])
+with col_logout1:
+    if credits_left != "무제한":
+        st.success(f"환영합니다, {st.session_state.current_student} 님! 😊 (남은 무료 체험: {credits_left}회)")
+    else:
+        st.success(f"환영합니다, {st.session_state.current_student} 님! 😊 (정규 수강생)")
+with col_logout2:
+    if st.button("로그아웃"):
+        st.session_state.logged_in = False
+        st.rerun()
+st.divider()
+
+pdf_options = {}
+pdf_display_mapping = {}
+
+if os.path.exists("pdf_materials"):
+    for root, dirs, files in os.walk("pdf_materials"):
+        rel_path = os.path.relpath(root, "pdf_materials")
+        category_name = "미분류 자료" if rel_path == "." else rel_path.replace("\\", "/")
+        pdf_files = [f.replace('.pdf', '') for f in files if f.endswith(".pdf")]
+        
+        if pdf_files:
+            if category_name not in pdf_options:
+                pdf_options[category_name] = []
+            for f in pdf_files:
+                clean_name = clean_display_name(f)
+                if clean_name not in pdf_options[category_name]:
+                    pdf_options[category_name].append(clean_name)
+                    pdf_display_mapping[clean_name] = f 
+
+st.subheader("🔍 1. 분석할 지문 불러오기")
+
+if pdf_options:
+    selected_category = st.selectbox("1) 출판사/분류 선택", list(pdf_options.keys()))
+    display_books = pdf_options[selected_category]
+    selected_display_book
