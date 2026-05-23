@@ -24,6 +24,7 @@ def clean_display_name(raw_name):
     for word in blacklist:
         cleaned = re.sub(word, '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\[.*?\]|\(.*?\)|\_내지|\_통합본|\_생략된 지문|\_분석노트|\_정답', '', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned)
     return cleaned.strip()
 
 @st.cache_resource(show_spinner=False)
@@ -44,21 +45,18 @@ def load_permanent_pdfs_to_gemini():
                         pass
     return gemini_files_dict
 
-# --- 🚨 [교재별 실제 단원/번호 매핑 사전] ---
+# --- 교재별 맞춤형 단원/번호 세팅 ---
 book_custom_settings = {
     "올림포스 영어독해의 기본1": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 12},
     "올림포스 영어독해의 기본2": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 10},
-    "올림포스 영어독해의 기본2_내지": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 10},
     "올림포스 9대 변형유형": {"u_label": "Unit", "u_max": 10, "q_label": "번", "q_max": 8},
     "수능특강light 영어독해연습": {"u_label": "강", "u_max": 12, "q_label": "번", "q_max": 12},
     "기본값": {"u_label": "Unit", "u_max": 25, "q_label": "번", "q_max": 15}
 }
 
-# --- 🚨 타이틀 명칭 전면 개편 완료 ---
 st.set_page_config(page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", page_icon="📚", layout="centered")
 st.markdown("<h2 style='text-align: center;'>📚 English with Nora_혼자서도 할 수 있다!<br>중/고등학생 내신대비 자습실</h2><hr>", unsafe_allow_html=True)
 
-# 블로그 체험자용 임시 보관소 (정규 수강생은 Secrets 금고에서 판독)
 if "user_db" not in st.session_state:
     st.session_state.user_db = {}
 
@@ -66,7 +64,7 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_student = ""
 
-# 로그인 시스템
+# --- 통합 로그인 시스템 ---
 if not st.session_state.logged_in:
     tab_login, tab_signup, tab_find = st.tabs(["🔒 로그인", "📝 회원가입 (무료체험)", "🔍 ID/PW 찾기"])
     
@@ -122,6 +120,7 @@ with col_logout2:
         st.rerun()
 st.divider()
 
+# --- 자동 폴더 스캔 및 메뉴 생성 ---
 pdf_options = {}
 pdf_display_mapping = {}
 
@@ -145,4 +144,18 @@ st.subheader("🔍 1. 분석할 지문 불러오기")
 if pdf_options:
     selected_category = st.selectbox("1) 출판사/분류 선택", list(pdf_options.keys()))
     display_books = pdf_options[selected_category]
-    selected_display_book
+    selected_display_book = st.selectbox("2) 교재명 선택", display_books)
+    selected_book = pdf_display_mapping[selected_display_book]
+    
+    book_setting = book_custom_settings.get(selected_display_book, book_custom_settings["기본값"])
+    
+    col_unit, col_q = st.columns(2)
+    with col_unit:
+        unit_list = [f"{i}{book_setting['u_label']}" for i in range(1, book_setting['u_max'] + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
+        selected_unit = st.selectbox(f"3) 단원 ({book_setting['u_label']}) 선택", ["선택하세요"] + unit_list)
+        final_unit = selected_unit
+        if selected_unit == "직접 입력 (타이핑)":
+            final_unit = st.text_input("단원을 직접 적어주세요")
+
+    with col_q:
+        q_list = [f"{i}{book_setting['q_label']}" for i in range(1, book_setting['q_max
