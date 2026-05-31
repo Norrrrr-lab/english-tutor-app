@@ -17,8 +17,9 @@ except Exception:
 
 model = genai.GenerativeModel(valid_model_name)
 
+# --- 🚨 1. 저작권 보호 및 '상세분석', '지문분석' 글씨 완전 세탁기 ---
 def clean_display_name(raw_name):
-    blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미']
+    blacklist = ['이그잼포유', 'exam4you', '아잉카', '리카수니', '황인영', '기출비', '족보닷컴', '나무아카데미', '상세분석', '지문분석']
     cleaned = raw_name
     for word in blacklist:
         cleaned = re.sub(word, '', cleaned, flags=re.IGNORECASE)
@@ -44,13 +45,38 @@ def load_permanent_pdfs_to_gemini():
                         pass
     return gemini_files_dict
 
-book_custom_settings = {
-    "올림포스 영어독해의 기본1": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 12},
-    "올림포스 영어독해의 기본2": {"u_label": "강", "u_max": 18, "q_label": "번", "q_max": 10},
-    "올림포스 9대 변형유형": {"u_label": "Unit", "u_max": 10, "q_label": "번", "q_max": 8},
-    "수능특강light 영어독해연습": {"u_label": "강", "u_max": 12, "q_label": "번", "q_max": 12},
-    "기본값": {"u_label": "Unit", "u_max": 25, "q_label": "번", "q_max": 15}
-}
+# --- 🚨 2. 스마트 교재 맞춤형 드롭다운 (모의고사 완벽 대응 추가) ---
+def get_dynamic_dropdowns(book_name, selected_u=None):
+    clean_name = book_name.replace(" ", "")
+    
+    if "수능특강light영어독해연습" in clean_name or "수특light" in clean_name:
+        units = [f"{i}강" for i in range(1, 13)] + [f"Mini Test {i}" for i in range(1, 4)] + ["직접 입력 (타이핑)"]
+        if selected_u and "Mini Test" in selected_u:
+            qs = [f"{i}번" for i in range(1, 29)] + ["전체 지문", "직접 입력 (타이핑)"]
+        else:
+            qs = [f"{i}번" for i in range(1, 8)] + ["5-6번", "6-7번", "전체 지문", "직접 입력 (타이핑)"]
+        return units, qs
+        
+    elif "올림포스영어독해의기본1" in clean_name or "올림포스영어독해의기본2" in clean_name:
+        units = [f"Unit {i}" for i in range(1, 19)] + ["직접 입력 (타이핑)"]
+        qs = ["Analysis", "1번", "2번", "3번", "서술형", "논술형", "1-2번", "2-3번", "전체 지문", "직접 입력 (타이핑)"]
+        return units, qs
+        
+    elif "올림포스9대변형유형" in clean_name:
+        units = [f"Unit {i}" for i in range(1, 11)] + ["Test", "직접 입력 (타이핑)"]
+        qs = [f"{i}번" for i in range(1, 9)] + ["전체 지문", "직접 입력 (타이핑)"]
+        return units, qs
+        
+    # [모의고사 로직 추가: 18~40번, 복합 41-42, 43-45 구성]
+    elif "모의고사" in clean_name:
+        units = ["전체 문항 (단일 회차)", "직접 입력 (타이핑)"]
+        qs = [f"{i}번" for i in range(18, 41)] + ["41-42번", "43-45번", "전체 지문", "직접 입력 (타이핑)"]
+        return units, qs
+        
+    else:
+        units = [f"Unit {i}" for i in range(1, 26)] + ["Test/모의고사", "직접 입력 (타이핑)"]
+        qs = [f"{i}번" for i in range(1, 16)] + ["전체 지문", "직접 입력 (타이핑)"]
+        return units, qs
 
 st.set_page_config(page_title="English with Nora_혼자서도 할 수 있다! 중/고등학생 내신대비 자습실", page_icon="📚", layout="centered")
 st.markdown("<h2 style='text-align: center;'>📚 English with Nora_혼자서도 할 수 있다!<br>중/고등학생 내신대비 자습실</h2><hr>", unsafe_allow_html=True)
@@ -143,19 +169,19 @@ if pdf_options:
     selected_display_book = st.selectbox("2) 교재명 선택", display_books)
     selected_book = pdf_display_mapping[selected_display_book]
     
-    book_setting = book_custom_settings.get(selected_display_book, book_custom_settings["기본값"])
+    units, _ = get_dynamic_dropdowns(selected_display_book)
     
     col_unit, col_q = st.columns(2)
     with col_unit:
-        unit_list = [f"{i}{book_setting['u_label']}" for i in range(1, book_setting['u_max'] + 1)] + ["Test/모의고사", "직접 입력 (타이핑)"]
-        selected_unit = st.selectbox(f"3) 단원 ({book_setting['u_label']}) 선택", ["선택하세요"] + unit_list)
+        selected_unit = st.selectbox("3) 단원 선택", ["선택하세요"] + units)
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
             final_unit = st.text_input("단원을 직접 적어주세요")
 
+    _, qs = get_dynamic_dropdowns(selected_display_book, selected_unit)
+
     with col_q:
-        q_list = [f"{i}{book_setting['q_label']}" for i in range(1, book_setting['q_max'] + 1)] + ["전체 지문", "직접 입력 (타이핑)"]
-        selected_q = st.selectbox(f"4) 지문 번호 ({book_setting['q_label']}) 선택", ["선택하세요"] + q_list)
+        selected_q = st.selectbox("4) 지문 번호 선택", ["선택하세요"] + qs)
         final_q = selected_q
         if selected_q == "직접 입력 (타이핑)":
             final_q = st.text_input("지문 번호를 직접 적어주세요")
@@ -215,39 +241,16 @@ if st.session_state.get("extracted_text"):
                 else:
                     st.session_state.user_db[st.session_state.current_student]["credits"] -= 1
 
-            base_instruction = f"""
-            당신은 학생들의 자습을 완벽하게 서포트하는 유능한 '자습 도우미'입니다. 
-            반드시 제공된 [영어 지문] 내용만을 바탕으로 답변해야 하며, 존댓말을 사용하세요.
-            [영어 지문]:
-            {st.session_state.extracted_text}
-            """
+            base_instruction = "당신은 학생들의 자습을 완벽하게 서포트하는 유능한 '자습 도우미'입니다. 반드시 제공된 [영어 지문] 내용만을 바탕으로 답변해야 하며, 존댓말을 사용하세요.\n[영어 지문]:\n" + st.session_state.extracted_text
 
             if "1. 구문" in mode:
-                system_prompt = base_instruction + """
-                [출력 명령 - 시중 최고급 구문 워크북 스타일]
-                1. 지문에 존재하는 모든 영문장을 한 문장씩 행 단위로 깔끔히 격리 배치하고 바로 아래에 1:1 대응하는 한글 번역을 쌍으로 매칭하세요.
-                2. 줄글로 풀어쓰는 난잡한 분석은 엄금합니다. 영문장 내부의 핵심 구조를 명확한 기호구획([ ], ( ))으로 가두어 시각화하고, 복잡한 구문 성분을 기호 하단에 표 형태로 단답형으로 정리하세요.
-                3. 지문 내에서 다의어 성격이 강한 기초 핵심 단어 3개를 엄선하여, '단어 본질적 개념', '본 지문 내 의미', '기타 다의어 확장 의미'를 마크다운 표로 정리하세요.
-                """
+                system_prompt = base_instruction + "\n[출력 명령 - 시중 최고급 구문 워크북 스타일]\n1. 지문에 존재하는 모든 영문장을 한 문장씩 행 단위로 깔끔히 격리 배치하고 바로 아래에 1:1 대응하는 한글 번역을 쌍으로 매칭하세요.\n2. 줄글로 풀어쓰는 난잡한 분석은 절대 엄금합니다. 영문장 내부의 핵심 구조(명사절, 형용사구, 부사절 등)를 명확한 기호구획([ ], ( ))으로 가두어 시각화하고, 복잡한 구문 성분을 기호 하단이나 우측에 표 형태로 깔끔하게 단답형으로 쪼개서 정리하세요.\n3. 지문 내에서 다의어 성격이 매우 강한 기초 핵심 단어 3개를 엄선하여, '단어 본질적 개념', '본 지문 내 문맥적 의미', '기타 핵심 다의어 확장 의미'를 마크다운 표(Table)로 완벽히 구조화하여 나열하세요."
             elif "2. 주요" in mode:
-                system_prompt = base_instruction + """
-                [출력 명령 - 2대 핵심 문장 픽 박스 & 유반의어 데이터]
-                1. 지문 전체 문장 해석은 누락시키고, 단 2개의 극대화된 핵심 문장만 엄선하여 전용 분석 박스를 구현하세요. (문장1: 줄거리 핵심, 문장2: 문법 복잡)
-                2. 이 2개의 문장은 줄글 해설을 피하고, 아래의 가독성 높은 구획화 구조로 완전히 해체하여 표기하세요.
-                   * [원본 영문장 명시] -> [구조 격파 기호 분할 단락] -> [어법 킬러 포인트 요약]
-                3. 핵심 키워드 3개를 추출하고, Merriam-Webster 사전 기준 최우선 순위의 동의어(Synonyms)와 반의어(Antonyms)를 표로 가공해 내세요.
-                """
+                system_prompt = base_instruction + "\n[출력 명령 - 2대 핵심 문장 픽 박스 & Merriam-Webster 유반의어 데이터]\n1. 지문 전체 문장 해석은 과감하게 누락시키고, 오직 단 2개의 극대화된 핵심 문장만 엄선하여 전용 분석 박스를 구현하세요. (문장1: 줄거리 핵심, 문장2: 문법 복잡)\n2. 이 2개의 문장은 절대로 텍스트 줄글 해설로 뭉뚱그리지 말고, 시중의 프리미엄 유료 분석지 레이아웃을 벤치마킹하여 아래의 가독성 높은 구획화 구조로 완전히 해체하여 표기하세요. [원본 영문장 명시] -> [구조 격파 기호 분할 및 성분 파싱 단락] -> [핵심 어법적 킬러 포인트 핵심 요약]\n3. 지문의 핵심 키워드 3개를 추출하고, 미국의 세계적인 권위 사전인 'Merriam-Webster' 기준에 명확히 입각하여, 가장 관련도가 조밀하고 진하게 처리되는 최우선 순위의 동의어(Synonyms)와 반의어(Antonyms)를 체계적인 정돈 표(Table)로 가공해 내세요."
             elif "3. 전체" in mode:
-                system_prompt = base_instruction + """
-                [출력 명령 - 철저한 한글 중심 인포그래픽 흐름도 디자인]
-                1. 영어 중심의 나열이나 단순 아이콘 배치를 금지합니다. 해설 구조 전체를 '한글 중심'으로 가공하세요.
-                2. 지문의 흐름 및 논리 구조를 마크다운 다이어그램 서식 블록으로 가시화하세요.
-                   - 예시: [ 도입 ] ➔ [ 전개 ] ➔ [ 심화 ] ➔ [ 결론 ]
-                   - 각 단계 내부 상자에는 인과관계를 1~2줄 요약 텍스트로 기입하세요.
-                3. 최종 하단 영역에는 지문의 대의를 관통하는 핵심 테마 키워드 3개를 선정하고, 유반의어를 곁들인 '한글 키워드 블록 리스트'를 만드세요.
-                """
+                system_prompt = base_instruction + "\n[출력 명령 - 철저한 한글 중심 인포그래픽 흐름도 디자인]\n1. 영어 중심의 나열이나 단순 아이콘 배치는 자습 능률을 심각하게 저하시키므로 절대로 금지합니다. 해설 구조 전체를 철저하게 '한글 중심'으로 가공하세요.\n2. 캔바(Canva)나 노트북LM의 핵심 요약 인포그래픽 포스터를 보듯, 지문의 흐름 및 논리 구조를 가로 혹은 세로형태의 마크다운 다이어그램 서식 블록으로 가시화하세요. 예시 흐름 레이아웃: [ 배경/도입 ] ➔ [ 전개 및 원인 발발 ] ➔ [ 핵심 갈등/심화 단락 ] ➔ [ 최종 결론 및 요약 ]\n3. 최종 하단 영역에는 해당 지문의 대의를 관통하는 핵심 테마 키워드 3개를 선정하고, 각 단어별 핵심 유반의어를 1~2개씩 촘촘하게 곁들인 '한글 키워드 블록 리스트'를 만들어 자습 마무리를 도우세요."
             else:
-                system_prompt = base_instruction + f"\n[명령]: 학생의 다음 구체적인 자유 질문이나 자습 중 애로사항에 대해 명쾌한 해결책을 건네세요. \n[학생 질문]: {user_question}"
+                system_prompt = base_instruction + "\n[명령]: 학생의 다음 구체적인 자유 질문이나 자습 중 애로사항에 대해 명쾌한 해결책과 따뜻한 격려를 건네세요. \n[학생 질문]: " + user_question
 
             with st.spinner("자습실 도우미가 분석지를 정교하게 빌드 중입니다..."):
                 try:
@@ -259,3 +262,5 @@ if st.session_state.get("extracted_text"):
     if st.session_state.get("analysis_result"):
         st.info("📌 **자습실 해설:**")
         st.markdown(st.session_state.analysis_result, unsafe_allow_html=True)
+
+# ==== 코드의 끝입니다. 여기까지 모두 복사되었는지 꼭 확인하세요! ====
