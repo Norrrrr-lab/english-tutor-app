@@ -45,9 +45,10 @@ def load_permanent_pdfs_to_gemini():
                         pass
     return gemini_files_dict
 
-# --- 🚨 2. 스마트 교재 맞춤형 드롭다운 로직 ---
-def get_dynamic_dropdowns(book_name, selected_u=None):
+# --- 🚨 2. 스마트 교재 맞춤형 드롭다운 (폴더명까지 체크!) ---
+def get_dynamic_dropdowns(book_name, category_name="", selected_u=None):
     clean_name = book_name.replace(" ", "")
+    clean_cat = category_name.replace(" ", "")
     
     if "수능특강light영어독해연습" in clean_name or "수특light" in clean_name:
         units = [f"{i}강" for i in range(1, 13)] + [f"Mini Test {i}" for i in range(1, 4)] + ["직접 입력 (타이핑)"]
@@ -67,10 +68,10 @@ def get_dynamic_dropdowns(book_name, selected_u=None):
         qs = [f"{i}번" for i in range(1, 9)] + ["전체 지문", "직접 입력 (타이핑)"]
         return units, qs
         
-    # --- [NEW] 모의고사 18~45번 원패스 로직 ---
-    elif "모의고사" in clean_name:
-        units = [f"{i}번" for i in range(18, 41)] + ["41-42번", "43-45번", "전체 지문", "직접 입력 (타이핑)"]
-        qs = [] # 모의고사는 두 번째 드롭다운(4번 지문)이 불필요하여 비워둠
+    # [강화된 모의고사/학력평가 로직: 폴더명이나 교재명에 단어가 있으면 발동]
+    elif "모의고사" in clean_name or "모의고사" in clean_cat or "학력평가" in clean_name:
+        units = [f"{i}번" for i in range(18, 46)] + ["41-42번", "43-45번", "전체 지문", "직접 입력 (타이핑)"]
+        qs = [] # 4번 지문 번호 창을 비워버립니다.
         return units, qs
         
     else:
@@ -169,18 +170,18 @@ if pdf_options:
     selected_display_book = st.selectbox("2) 교재명 선택", display_books)
     selected_book = pdf_display_mapping[selected_display_book]
     
-    # --- 🚨 [UI 개편] 모의고사는 3번 드롭다운 하나로 끝내기 ---
-    is_mock_test = "모의고사" in selected_display_book.replace(" ", "")
+    # --- 🚨 [수정됨] 폴더명(selected_category)과 교재명을 동시 체크하여 모의고사 여부 판단 ---
+    is_mock_test = "모의고사" in selected_category.replace(" ", "") or "모의고사" in selected_display_book.replace(" ", "") or "학력평가" in selected_display_book.replace(" ", "")
     
     if is_mock_test:
-        units, _ = get_dynamic_dropdowns(selected_display_book)
+        units, _ = get_dynamic_dropdowns(selected_display_book, selected_category)
         selected_unit = st.selectbox("3) 문항 번호 선택", ["선택하세요"] + units)
         final_unit = selected_unit
         if selected_unit == "직접 입력 (타이핑)":
             final_unit = st.text_input("문항 번호를 직접 적어주세요")
         final_q = "" # 모의고사는 4번 창이 사라짐
     else:
-        units, _ = get_dynamic_dropdowns(selected_display_book)
+        units, _ = get_dynamic_dropdowns(selected_display_book, selected_category)
         col_unit, col_q = st.columns(2)
         with col_unit:
             selected_unit = st.selectbox("3) 단원 선택", ["선택하세요"] + units)
@@ -188,7 +189,7 @@ if pdf_options:
             if selected_unit == "직접 입력 (타이핑)":
                 final_unit = st.text_input("단원을 직접 적어주세요")
 
-        _, qs = get_dynamic_dropdowns(selected_display_book, selected_unit)
+        _, qs = get_dynamic_dropdowns(selected_display_book, selected_category, selected_unit)
         with col_q:
             selected_q = st.selectbox("4) 지문 번호 선택", ["선택하세요"] + qs)
             final_q = selected_q
